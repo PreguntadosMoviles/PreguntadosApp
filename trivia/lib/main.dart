@@ -38,34 +38,37 @@ class _LobbyPageState extends State<LobbyPage> {
 
     widget.channel.stream.listen((data) {
       final message = json.decode(data);
+      print('Mensaje recibido: $message'); // Log del mensaje recibido
       if (message['type'] == 'start') {
         setState(() {
           isGameStarted = true;
-          // Nos aseguramos de que 'questions' es una lista de mapas y las opciones son listas.
           questions = List<Map<String, dynamic>>.from(message['questions'].map((q) => {
                 'question': q['question'],
-                'options': List<String>.from(q['options']), // Asegurarse de que las opciones son una lista de strings
+                'options': List<String>.from(q['options']),
                 'answer': q['answer'],
               }));
         });
       }
 
-      if (message['type'] == 'game_over') {
-        // Cuando el juego termina, navega a la pantalla de resultados
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ResultsPage(
-              player1Score: message['player1Score'],
-              player2Score: message['player2Score'],
+      if (message['type'] == 'over') {
+        print('Recibido mensaje de fin de juego. Puntajes: Jugador 1 - ${message['player1Score']}, Jugador 2 - ${message['player2Score']}');
+        Future.delayed(Duration.zero, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ResultsPage(
+                player1Score: message['player1Score'],
+                player2Score: message['player2Score'],
+              ),
             ),
-          ),
-        );
+          );
+        });
       }
     });
   }
 
   void _startGame() {
+    print('Enviando mensaje de inicio del juego');
     widget.channel.sink.add(json.encode({'type': 'start'}));
   }
 
@@ -120,48 +123,43 @@ class _TriviaPageState extends State<TriviaPage> {
     startTimer();
   }
 
-void _nextQuestion() {
-  if (currentQuestionIndex < widget.questions.length - 1) {
-    setState(() {
-      currentQuestionIndex++;
-      timeRemaining = 10;
-      startTimer();
-    });
-  } else {
-    timer?.cancel();
-
-    // Enviar el puntaje actual al servidor
-    widget.channel.sink.add(json.encode({
-      'type': 'end',
-      'score': score
-    }));
-
-    // Moverse a la pantalla de resultados
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ResultsPage(
-          player1Score: score,  // Puntaje del jugador actual
-          player2Score: 0,      // Aquí puedes usar el puntaje del otro jugador recibido del servidor
-        ),
-      ),
-    );
-  }
-}
-
-void startTimer() {
-  timer?.cancel(); // Asegúrate de cancelar cualquier temporizador activo
-  timer = Timer.periodic(Duration(seconds: 1), (timer) {
-    setState(() {
-      if (timeRemaining > 0) {
-        timeRemaining--;
+  void _nextQuestion() {
+    if (currentQuestionIndex < widget.questions.length - 1) {
+      setState(() {
+        currentQuestionIndex++;
+        timeRemaining = 10;
+        startTimer();
+      });
+    } else {
+      timer?.cancel();
+      print('Enviando puntaje final: $score');
+      
+      // Verificar si el canal WebSocket está abierto
+      if (widget.channel.sink != null) {
+        widget.channel.sink.add(json.encode({
+          'type': 'end',
+          'score': score
+        }));
+        print('Mensaje de puntaje final enviado');
       } else {
-        timer.cancel();
-        _nextQuestion(); // Cambia a la siguiente pregunta cuando se acabe el tiempo
+        print('El canal WebSocket está cerrado o no disponible');
       }
+    }
+  }
+
+  void startTimer() {
+    timer?.cancel(); // Asegúrate de cancelar cualquier temporizador activo
+    timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      setState(() {
+        if (timeRemaining > 0) {
+          timeRemaining--;
+        } else {
+          timer.cancel();
+          _nextQuestion(); // Cambia a la siguiente pregunta cuando se acabe el tiempo
+        }
+      });
     });
-  });
-}
+  }
 
   void _answerQuestion(String selectedOption) {
     if (selectedOption == widget.questions[currentQuestionIndex]['answer']) {
