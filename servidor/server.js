@@ -1,10 +1,12 @@
 const WebSocket = require('ws');
 const axios = require('axios');
 
+
 async function obtenerPreguntas() {
   const url = 'https://api.quiz-contest.xyz/questions?limit=60&page=1&category=geography&format=multiple';
   try {
     const response = await axios.get(url, { headers: { 'Authorization': '$2b$12$JQ01Gihw4ey.Lk2azzoyH.XjaL2SdZvzCNN/IGKi66GM9Q89J.OaC' } });
+
     const preguntas = response.data.questions.map(pregunta => ({
       question: pregunta.question,
       options: [...pregunta.incorrectAnswers, pregunta.correctAnswers].sort(() => Math.random() - 0.5),
@@ -65,10 +67,12 @@ obtenerPreguntas().then(questions => {
     broadcastPlayers();
     broadcastScores(); // Enviar puntajes iniciales
 
+
     ws.on('message', message => {
       const msg = JSON.parse(message);
 
       if (msg.type === 'start') {
+
         console.log('El juego ha comenzado');
         players.forEach(player => {
           player.ws.send(JSON.stringify({ type: 'start', questions, timer: globalTimer, scores }));
@@ -83,18 +87,22 @@ obtenerPreguntas().then(questions => {
 
       if (msg.type === 'end') {
         console.log(`${playerId} terminó el juego con puntaje: ${msg.score}`);
+
       }
     });
 
     ws.on('close', () => {
+
       console.log(`${playerId} desconectado`);
       players = players.filter(player => player.ws !== ws);
       delete scores[playerId]; // Eliminar puntaje del jugador desconectado
       broadcastPlayers();
       broadcastScores(); // Actualizar tabla de puntajes
+
     });
   });
 
 }).catch(error => {
   console.error('Error al iniciar el servidor WebSocket:', error);
 });
+

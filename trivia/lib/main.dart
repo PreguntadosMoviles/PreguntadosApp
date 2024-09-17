@@ -12,6 +12,7 @@ class TriviaGame extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Trivia Game',
+
       theme: ThemeData(
         primarySwatch: Colors.blue,
         brightness: Brightness.dark,
@@ -23,6 +24,7 @@ class TriviaGame extends StatelessWidget {
       ),
       home: LobbyPage(
           channel: WebSocketChannel.connect(Uri.parse('ws://localhost:8082'))),
+
     );
   }
 }
@@ -78,6 +80,7 @@ class _LobbyPageState extends State<LobbyPage> {
       if (message['type'] == 'update_scores') {
         setState(() {
           scores = Map<String, int>.from(message['scores']);
+
         });
       }
     });
@@ -337,6 +340,7 @@ class _TriviaPageState extends State<TriviaPage> {
             ),
           ],
         ),
+
       ),
     );
   }
