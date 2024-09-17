@@ -1,38 +1,100 @@
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 8080 });
+const axios = require('axios');
 
-let players = [];  // Lista de jugadores conectados
-const questions = [
-  { question: '¿Cuál es la capital de Francia?', options: ['París', 'Londres', 'Berlín', 'Madrid'], answer: 'París' },
-  { question: '¿Cuánto es 2 + 2?', options: ['3', '4', '5', '6'], answer: '4' },
-  { question: '¿Cuál es el color del cielo?', options: ['Rojo', 'Azul', 'Verde', 'Amarillo'], answer: 'Azul' }
-];
+async function obtenerPreguntas() {
+  const url = 'https://api.quiz-contest.xyz/questions?limit=60&page=1&category=geography&format=multiple';
+  try {
+    const response = await axios.get(url, { headers: { 'Authorization': '$2b$12$JQ01Gihw4ey.Lk2azzoyH.XjaL2SdZvzCNN/IGKi66GM9Q89J.OaC' } });
+    const preguntas = response.data.questions.map(pregunta => ({
+      question: pregunta.question,
+      options: [...pregunta.incorrectAnswers, pregunta.correctAnswers].sort(() => Math.random() - 0.5),
+      answer: pregunta.correctAnswers
+    }));
+    return preguntas;
 
-wss.on('connection', ws => {
-  console.log('Nuevo jugador conectado');
-  players.push(ws);  // Agregar nuevo jugador a la lista
+  } catch (error) {
+    console.error('Error al obtener las preguntas', error);
+    return [];
+  }
+}
 
-  ws.on('message', message => {
-    const msg = JSON.parse(message);
+obtenerPreguntas().then(questions => {
+  console.log('Servidor WebSocket ejecutándose con las preguntas obtenidas');
 
-    if (msg.type === 'start') {
-      // Cuando uno de los jugadores inicia el juego
-      console.log('El juego ha comenzado');
+  const wss = new WebSocket.Server({ port: 8082 }); 
+  let players = [];
+  let globalTimer = 60;  // Timer global de 1 minuto
+  let scores = {}; // Puntajes de los jugadores
+
+  function broadcastPlayers() {
+    const playerNames = players.map(player => player.id);
+    players.forEach(player => {
+      player.ws.send(JSON.stringify({ type: 'players', players: playerNames }));
+    });
+  }
+
+  function broadcastScores() {
+    players.forEach(player => {
+      player.ws.send(JSON.stringify({ type: 'update_scores', scores }));
+    });
+  }
+
+  function startGlobalTimer() {
+    globalTimer = 60; // Reiniciar el timer global a 1 minuto
+    const timerInterval = setInterval(() => {
+      globalTimer--;
       players.forEach(player => {
-        player.send(JSON.stringify({ type: 'start', questions: questions }));
+        player.ws.send(JSON.stringify({ type: 'timer', timeRemaining: globalTimer }));
       });
-    }
 
-    if (msg.type === 'disconnect') {
-      console.log('Jugador desconectado');
-      players = players.filter(player => player !== ws);
-    }
+      if (globalTimer <= 0) {
+        clearInterval(timerInterval);
+        players.forEach(player => {
+          player.ws.send(JSON.stringify({ type: 'end', message: 'El tiempo ha terminado' }));
+        });
+      }
+    }, 1000);
+  }
+
+  wss.on('connection', ws => {
+    const playerId = `Jugador ${players.length + 1}`;
+    console.log(`${playerId} conectado`);
+    players.push({ ws, id: playerId });
+    scores[playerId] = 0; // Iniciar el puntaje en 0
+
+    broadcastPlayers();
+    broadcastScores(); // Enviar puntajes iniciales
+
+    ws.on('message', message => {
+      const msg = JSON.parse(message);
+
+      if (msg.type === 'start') {
+        console.log('El juego ha comenzado');
+        players.forEach(player => {
+          player.ws.send(JSON.stringify({ type: 'start', questions, timer: globalTimer, scores }));
+        });
+        startGlobalTimer();
+      }
+
+      if (msg.type === 'update_score') {
+        scores[playerId] = msg.score; // Actualizar puntaje del jugador
+        broadcastScores(); // Enviar puntajes actualizados
+      }
+
+      if (msg.type === 'end') {
+        console.log(`${playerId} terminó el juego con puntaje: ${msg.score}`);
+      }
+    });
+
+    ws.on('close', () => {
+      console.log(`${playerId} desconectado`);
+      players = players.filter(player => player.ws !== ws);
+      delete scores[playerId]; // Eliminar puntaje del jugador desconectado
+      broadcastPlayers();
+      broadcastScores(); // Actualizar tabla de puntajes
+    });
   });
 
-  ws.on('close', () => {
-    console.log('Jugador desconectado');
-    players = players.filter(player => player !== ws);
-  });
+}).catch(error => {
+  console.error('Error al iniciar el servidor WebSocket:', error);
 });
-
-console.log('Servidor WebSocket ejecutándose en ws://localhost:8080');
