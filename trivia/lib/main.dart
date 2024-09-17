@@ -13,7 +13,7 @@ class TriviaGame extends StatelessWidget {
     return MaterialApp(
       title: 'Trivia Game',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: LobbyPage(channel: WebSocketChannel.connect(Uri.parse('ws://localhost:8080'))),
+      home: LobbyPage(channel: WebSocketChannel.connect(Uri.parse('ws://localhost:8082'))),
     );
   }
 }
@@ -40,7 +40,12 @@ class _LobbyPageState extends State<LobbyPage> {
       if (message['type'] == 'start') {
         setState(() {
           isGameStarted = true;
-          questions = List<Map<String, dynamic>>.from(message['questions']);
+          // Nos aseguramos de que 'questions' es una lista de mapas y las opciones son listas.
+          questions = List<Map<String, dynamic>>.from(message['questions'].map((q) => {
+                'question': q['question'],
+                'options': List<String>.from(q['options']), // Asegurarse de que las opciones son una lista de strings
+                'answer': q['answer'],
+              }));
         });
       }
     });
@@ -145,10 +150,17 @@ class _TriviaPageState extends State<TriviaPage> {
         children: [
           Text('Tiempo restante: $timeRemaining', style: TextStyle(fontSize: 24, color: Colors.red)),
           SizedBox(height: 20),
-          Text(widget.questions[currentQuestionIndex]['question'], style: TextStyle(fontSize: 24), textAlign: TextAlign.center),
+          Text(
+            widget.questions[currentQuestionIndex]['question'],
+            style: TextStyle(fontSize: 24),
+            textAlign: TextAlign.center,
+          ),
           SizedBox(height: 20),
           ...widget.questions[currentQuestionIndex]['options'].map<Widget>((option) {
-            return ElevatedButton(onPressed: () => _answerQuestion(option), child: Text(option));
+            return ElevatedButton(
+              onPressed: () => _answerQuestion(option),
+              child: Text(option),
+            );
           }).toList(),
         ],
       ),
