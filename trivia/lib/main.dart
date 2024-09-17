@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'resultados.dart';
 
 void main() {
   runApp(TriviaGame());
@@ -47,6 +48,19 @@ class _LobbyPageState extends State<LobbyPage> {
                 'answer': q['answer'],
               }));
         });
+      }
+
+      if (message['type'] == 'game_over') {
+        // Cuando el juego termina, navega a la pantalla de resultados
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ResultsPage(
+              player1Score: message['player1Score'],
+              player2Score: message['player2Score'],
+            ),
+          ),
+        );
       }
     });
   }
@@ -106,31 +120,48 @@ class _TriviaPageState extends State<TriviaPage> {
     startTimer();
   }
 
-  void startTimer() {
-    timer = Timer.periodic(Duration(seconds: 1), (timer) {
-      setState(() {
-        if (timeRemaining > 0) {
-          timeRemaining--;
-        } else {
-          timer.cancel();
-          _nextQuestion();
-        }
-      });
+void _nextQuestion() {
+  if (currentQuestionIndex < widget.questions.length - 1) {
+    setState(() {
+      currentQuestionIndex++;
+      timeRemaining = 10;
+      startTimer();
     });
-  }
+  } else {
+    timer?.cancel();
 
-  void _nextQuestion() {
-    if (currentQuestionIndex < widget.questions.length - 1) {
-      setState(() {
-        currentQuestionIndex++;
-        timeRemaining = 10;
-        startTimer();
-      });
-    } else {
-      timer?.cancel();
-      widget.channel.sink.add('Juego terminado. Puntaje: $score');
-    }
+    // Enviar el puntaje actual al servidor
+    widget.channel.sink.add(json.encode({
+      'type': 'end',
+      'score': score
+    }));
+
+    // Moverse a la pantalla de resultados
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ResultsPage(
+          player1Score: score,  // Puntaje del jugador actual
+          player2Score: 0,      // Aquí puedes usar el puntaje del otro jugador recibido del servidor
+        ),
+      ),
+    );
   }
+}
+
+void startTimer() {
+  timer?.cancel(); // Asegúrate de cancelar cualquier temporizador activo
+  timer = Timer.periodic(Duration(seconds: 1), (timer) {
+    setState(() {
+      if (timeRemaining > 0) {
+        timeRemaining--;
+      } else {
+        timer.cancel();
+        _nextQuestion(); // Cambia a la siguiente pregunta cuando se acabe el tiempo
+      }
+    });
+  });
+}
 
   void _answerQuestion(String selectedOption) {
     if (selectedOption == widget.questions[currentQuestionIndex]['answer']) {
