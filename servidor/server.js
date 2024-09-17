@@ -1,38 +1,59 @@
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 8080 });
+const axios = require('axios');
 
-let players = [];  // Lista de jugadores conectados
-const questions = [
-  { question: '¿Cuál es la capital de Francia?', options: ['París', 'Londres', 'Berlín', 'Madrid'], answer: 'París' },
-  { question: '¿Cuánto es 2 + 2?', options: ['3', '4', '5', '6'], answer: '4' },
-  { question: '¿Cuál es el color del cielo?', options: ['Rojo', 'Azul', 'Verde', 'Amarillo'], answer: 'Azul' }
-];
+async function obtenerPreguntas(){
+  const url = 'https://api.quiz-contest.xyz/questions?limit=10&page=1&category=geography&format=multiple';
+  try{
+    const response = await axios.get(url, { headers:{ 'Authorization': '$2b$12$JQ01Gihw4ey.Lk2azzoyH.XjaL2SdZvzCNN/IGKi66GM9Q89J.OaC'}});
+    const preguntas = response.data.questions.map(pregunta => ({
+      question: pregunta.question,
+      options: [...pregunta.incorrectAnswers, pregunta.correctAnswers].sort(() => Math.random() - 0.5),
+      answer: pregunta.correctAnswers
+    }));
+    return preguntas;
 
-wss.on('connection', ws => {
-  console.log('Nuevo jugador conectado');
-  players.push(ws);  // Agregar nuevo jugador a la lista
+  } catch (error){
+    console.error('Error al obtener las preguntas', error);
+    return [];
+  }
 
-  ws.on('message', message => {
-    const msg = JSON.parse(message);
+}
+obtenerPreguntas().then(questions => {
+  console.log('Servidor WebSocket ejecutándose con las preguntas obtenidas');
 
-    if (msg.type === 'start') {
-      // Cuando uno de los jugadores inicia el juego
-      console.log('El juego ha comenzado');
-      players.forEach(player => {
-        player.send(JSON.stringify({ type: 'start', questions: questions }));
-      });
-    }
+  const wss = new WebSocket.Server({ port: 8082 }); //cambio por mi compu
 
-    if (msg.type === 'disconnect') {
+  let players = [];  // Lista de jugadores conectados
+
+  wss.on('connection', ws => {
+    console.log('Nuevo jugador conectado');
+    players.push(ws);  // Agregar nuevo jugador a la lista
+
+    ws.on('message', message => {
+      const msg = JSON.parse(message);
+
+      if (msg.type === 'start') {
+        // Cuando uno de los jugadores inicia el juego
+        console.log('El juego ha comenzado');
+
+        // Usar las preguntas obtenidas previamente para iniciar el juego
+        players.forEach(player => {
+          player.send(JSON.stringify({ type: 'start', questions: questions }));
+        });
+      }
+
+      if (msg.type === 'disconnect') {
+        console.log('Jugador desconectado');
+        players = players.filter(player => player !== ws);
+      }
+    });
+
+    ws.on('close', () => {
       console.log('Jugador desconectado');
       players = players.filter(player => player !== ws);
-    }
+    });
   });
 
-  ws.on('close', () => {
-    console.log('Jugador desconectado');
-    players = players.filter(player => player !== ws);
-  });
+}).catch(error => {
+  console.error('Error al iniciar el servidor WebSocket:', error);
 });
-
-console.log('Servidor WebSocket ejecutándose en ws://localhost:8080');
