@@ -1,7 +1,6 @@
 const WebSocket = require('ws');
 const axios = require('axios');
 
-// Función para obtener las preguntas desde la API externa
 async function obtenerPreguntas() {
   const url = 'https://api.quiz-contest.xyz/questions?limit=10&page=1&category=geography&format=multiple';
   try {
@@ -12,6 +11,7 @@ async function obtenerPreguntas() {
       answer: pregunta.correctAnswers
     }));
     return preguntas;
+
   } catch (error) {
     console.error('Error al obtener las preguntas', error);
     return [];
@@ -36,6 +36,7 @@ obtenerPreguntas().then(questions => {
     console.log(`Nuevo jugador conectado con ID: ${playerId}`);
     ws.send(JSON.stringify({ type: 'yourId', id: playerId }));
 
+
     ws.on('message', message => {
       const msg = JSON.parse(message);
       console.log('Mensaje recibido:', msg);
@@ -46,6 +47,7 @@ obtenerPreguntas().then(questions => {
           console.log(`Enviando preguntas al jugador ${index + 1}`);
           ws.send(JSON.stringify({ type: 'start', questions: questions }));
         });
+        startGlobalTimer();
       }
 
       if (msg.type === 'end') {
@@ -95,6 +97,7 @@ obtenerPreguntas().then(questions => {
     });
 
     ws.on('close', () => {
+
       console.log('Jugador desconectado');
       const playerIndex = players.findIndex(player => player.ws === ws);
       if (playerIndex !== -1) {
