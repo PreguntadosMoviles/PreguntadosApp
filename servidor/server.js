@@ -23,7 +23,8 @@ obtenerPreguntas().then(questions => {
 
   const wss = new WebSocket.Server({ port: 8082 }); //cambio por mi compu
 
-  let players = [];  // Lista de jugadores conectados
+  let players = [];
+  let scores = {};  // Lista de jugadores conectados
 
   wss.on('connection', ws => {
     console.log('Nuevo jugador conectado');
@@ -31,17 +32,35 @@ obtenerPreguntas().then(questions => {
 
     ws.on('message', message => {
       const msg = JSON.parse(message);
-
+    
       if (msg.type === 'start') {
-        // Cuando uno de los jugadores inicia el juego
         console.log('El juego ha comenzado');
-
-        // Usar las preguntas obtenidas previamente para iniciar el juego
         players.forEach(player => {
           player.send(JSON.stringify({ type: 'start', questions: questions }));
         });
       }
+    
+      if (msg.type === 'end') {
+        console.log(`Jugador terminó el juego con un puntaje de: ${msg.score}`);
+        // Almacenar el puntaje del jugador
+        scores[ws] = msg.score;
+        // Si ambos jugadores han enviado sus puntajes, enviar los resultados
+        if (Object.keys(scores).length === players.length) {
+          const playerScores = Object.values(scores);
 
+          // Enviar los puntajes a ambos jugadores
+          players.forEach(player => {          
+            player.send(JSON.stringify({
+              type: 'game_over',
+              player1Score: playerScores[0],
+              player2Score: playerScores[1]
+            }))
+          });
+
+          scores = {};
+        }
+      }
+    
       if (msg.type === 'disconnect') {
         console.log('Jugador desconectado');
         players = players.filter(player => player !== ws);
