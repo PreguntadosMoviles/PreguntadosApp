@@ -6,11 +6,14 @@ async function obtenerPreguntas() {
   const url = 'https://api.quiz-contest.xyz/questions?limit=10&page=1&category=geography&format=multiple';
   try {
     const response = await axios.get(url, { headers: { 'Authorization': '$2b$12$JQ01Gihw4ey.Lk2azzoyH.XjaL2SdZvzCNN/IGKi66GM9Q89J.OaC' } });
-    const preguntas = response.data.questions.map(pregunta => ({
+    let preguntas = response.data.questions.map(pregunta => ({
       question: pregunta.question,
       options: [...pregunta.incorrectAnswers, pregunta.correctAnswers].sort(() => Math.random() - 0.5),
       answer: pregunta.correctAnswers
     }));
+
+    preguntas = preguntas.sort(() => Math.random() - 0.5);
+    
     return preguntas;
   } catch (error) {
     console.error('Error al obtener las preguntas', error);
@@ -39,20 +42,21 @@ obtenerPreguntas().then(questions => {
     const playerId = Date.now(); // Generar un ID único basado en el tiempo
     players.push({ id: playerId, ws: ws });
     scores[playerId] = 0; // Inicializar el puntaje para el nuevo jugador
-
+    
     console.log(`Nuevo jugador conectado con ID: ${playerId}`);
     ws.send(JSON.stringify({ type: 'yourId', id: playerId }));
     notifyPlayerCount(); // Notificar el número de jugadores conectados
 
-    ws.on('message', message => {
+    ws.on('message', async message => {
       const msg = JSON.parse(message);
       console.log('Mensaje recibido:', msg);
 
       if (msg.type === 'start') {
         console.log('El juego ha comenzado');
+        const preguntas = await obtenerPreguntas();
         players.forEach(({ ws }, index) => {
           console.log(`Enviando preguntas al jugador ${index + 1}`);
-          ws.send(JSON.stringify({ type: 'start', questions: questions }));
+          ws.send(JSON.stringify({ type: 'start', questions: preguntas }));
         });
       }
 
@@ -78,6 +82,7 @@ obtenerPreguntas().then(questions => {
           players.forEach(({ ws, id }) => {
             ws.send(JSON.stringify({
               type: 'over',
+              playerId: id === players[0].id ? 'Jugador 1' : 'Jugador 2',
               player1Score: playerScores[players[0].id] || 0,
               player2Score: playerScores[players[1].id] || 0
             }));
@@ -89,6 +94,9 @@ obtenerPreguntas().then(questions => {
           players = [];
           finishedPlayers.clear(); // Limpiar el conjunto de jugadores terminados
           notifyPlayerCount(); // Notificar el número de jugadores conectados
+        } else {
+          // Si no todos los jugadores han terminado, redirigir al jugador a la pantalla de espera
+          ws.send(JSON.stringify({ type: 'waiting' }));
         }
       }
 

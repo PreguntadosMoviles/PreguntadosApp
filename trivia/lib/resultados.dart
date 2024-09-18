@@ -5,26 +5,36 @@ import 'main.dart'; // Importa la página de LobbyPage
 class ResultsPage extends StatelessWidget {
   final int player1Score;
   final int player2Score;
+  final String playerId; // Identificar si es Jugador 1 o Jugador 2
 
-  ResultsPage({required this.player1Score, required this.player2Score});
+  ResultsPage({
+    required this.player1Score,
+    required this.player2Score,
+    required this.playerId,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Identificar al jugador actual y al contrincante
+    String jugadorActual = playerId == 'Jugador 1' ? 'Jugador 1' : 'Jugador 2';
+    String contrincante = playerId == 'Jugador 1' ? 'Jugador 2' : 'Jugador 1';
+    int scoreActual = playerId == 'Jugador 1' ? player1Score : player2Score;
+    int scoreContrincante = playerId == 'Jugador 1' ? player2Score : player1Score;
+
     return WillPopScope(
       onWillPop: () async {
-        // Realiza la misma acción de volver al lobby cuando se presiona la flecha hacia atrás
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(
             builder: (context) => LobbyPage(
               channel: WebSocketChannel.connect(
-                Uri.parse('ws://localhost:8082'), // Reinicia la conexión
+                Uri.parse('ws://localhost:8082'),
               ),
             ),
           ),
           (Route<dynamic> route) => false,
         );
-        return false; // Previene el comportamiento de retroceso predeterminado
+        return false;
       },
       child: Scaffold(
         backgroundColor: Colors.blueGrey[900],
@@ -40,19 +50,22 @@ class ResultsPage extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Resultados del Juego',
+                'Resultados del Juego: ¡Eres el "$jugadorActual"!',
                 style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: Colors.white),
               ),
               SizedBox(height: 20),
+              // Mostrar puntaje del jugador actual
               Text(
-                'Jugador 1: $player1Score correctas',
+                '$jugadorActual: $scoreActual correctas',
                 style: TextStyle(fontSize: 24, color: Colors.white70),
               ),
+              SizedBox(height: 20),
+              // Mostrar puntaje del contrincante
               Text(
-                'Jugador 2: $player2Score correctas',
+                '$contrincante: $scoreContrincante correctas',
                 style: TextStyle(fontSize: 24, color: Colors.white70),
               ),
               SizedBox(height: 40),
@@ -65,19 +78,16 @@ class ResultsPage extends StatelessWidget {
                   ),
                 ),
                 onPressed: () {
-                  // Cerrar la conexión actual y volver al Lobby como un nuevo usuario
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(
                       builder: (context) => LobbyPage(
                         channel: WebSocketChannel.connect(
-                          Uri.parse(
-                              'ws://localhost:8082'), // Reinicia la conexión
+                          Uri.parse('ws://localhost:8082'),
                         ),
                       ),
                     ),
-                    (Route<dynamic> route) =>
-                        false, // Elimina todas las rutas anteriores
+                    (Route<dynamic> route) => false,
                   );
                 },
                 child: Text('Volver al Lobby',

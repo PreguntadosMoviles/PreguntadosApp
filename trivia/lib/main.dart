@@ -3,6 +3,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'resultados.dart';
+import 'espera.dart';
 
 void main() {
   runApp(TriviaGame());
@@ -86,10 +87,20 @@ class _LobbyPageState extends State<LobbyPage> {
               builder: (context) => ResultsPage(
                 player1Score: message['player1Score'],
                 player2Score: message['player2Score'],
+                playerId: message['playerId'], // Asegúrate de pasar el 'playerId' aquí
               ),
             ),
           );
         });
+      }
+
+      if (message['type'] == 'waiting') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => WaitingPage(),
+          ),
+        );
       }
 
       if (message['type'] == 'playerCount') {
