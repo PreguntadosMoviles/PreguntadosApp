@@ -28,6 +28,13 @@ obtenerPreguntas().then(questions => {
   let scores = {}; // Objeto para almacenar los puntajes de los jugadores
   let finishedPlayers = new Set(); // Para rastrear los jugadores que han terminado
 
+  function notifyPlayerCount() {
+    const playerCount = players.length;
+    players.forEach(({ ws }) => {
+      ws.send(JSON.stringify({ type: 'playerCount', count: playerCount }));
+    });
+  }
+
   wss.on('connection', ws => {
     const playerId = Date.now(); // Generar un ID único basado en el tiempo
     players.push({ id: playerId, ws: ws });
@@ -35,6 +42,7 @@ obtenerPreguntas().then(questions => {
 
     console.log(`Nuevo jugador conectado con ID: ${playerId}`);
     ws.send(JSON.stringify({ type: 'yourId', id: playerId }));
+    notifyPlayerCount(); // Notificar el número de jugadores conectados
 
     ws.on('message', message => {
       const msg = JSON.parse(message);
@@ -80,6 +88,7 @@ obtenerPreguntas().then(questions => {
           scores = {};
           players = [];
           finishedPlayers.clear(); // Limpiar el conjunto de jugadores terminados
+          notifyPlayerCount(); // Notificar el número de jugadores conectados
         }
       }
 
@@ -90,6 +99,7 @@ obtenerPreguntas().then(questions => {
           const [removedPlayer] = players.splice(playerIndex, 1);
           delete scores[removedPlayer.id];
           finishedPlayers.delete(removedPlayer.id); // Eliminar al jugador desconectado del conjunto de terminados
+          notifyPlayerCount(); // Notificar el número de jugadores conectados
         }
       }
     });
@@ -101,6 +111,7 @@ obtenerPreguntas().then(questions => {
         const [removedPlayer] = players.splice(playerIndex, 1);
         delete scores[removedPlayer.id];
         finishedPlayers.delete(removedPlayer.id); // Eliminar al jugador desconectado del conjunto de terminados
+        notifyPlayerCount(); // Notificar el número de jugadores conectados
       }
     });
   });
