@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'resultados.dart';
 
 void main() {
   runApp(TriviaGame());
@@ -52,35 +53,30 @@ class _LobbyPageState extends State<LobbyPage> {
     widget.channel.stream.listen((data) {
       final message = json.decode(data);
 
+      print('Mensaje recibido: $message'); // Log del mensaje recibido
       if (message['type'] == 'start') {
         setState(() {
           isGameStarted = true;
-          questions = List<Map<String, dynamic>>.from(message['questions']);
-          globalTimeRemaining = message['timer'];
-          scores = Map<String, int>.from(message['scores']);
+          questions = List<Map<String, dynamic>>.from(message['questions'].map((q) => {
+                'question': q['question'],
+                'options': List<String>.from(q['options']),
+                'answer': q['answer'],
+              }));
         });
       }
 
-      if (message['type'] == 'players') {
-        setState(() {
-          players = List<String>.from(message['players']);
-        });
-      }
-
-      if (message['type'] == 'timer') {
-        setState(() {
-          globalTimeRemaining = message['timeRemaining'];
-          if (globalTimeRemaining <= 0) {
-            isGameStarted = false;
-            _showEndDialog();
-          }
-        });
-      }
-
-      if (message['type'] == 'update_scores') {
-        setState(() {
-          scores = Map<String, int>.from(message['scores']);
-
+      if (message['type'] == 'over') {
+        print('Recibido mensaje de fin de juego. Puntajes: Jugador 1 - ${message['player1Score']}, Jugador 2 - ${message['player2Score']}');
+        Future.delayed(Duration.zero, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ResultsPage(
+                player1Score: message['player1Score'],
+                player2Score: message['player2Score'],
+              ),
+            ),
+          );
         });
       }
     });
@@ -108,6 +104,7 @@ class _LobbyPageState extends State<LobbyPage> {
   }
 
   void _startGame() {
+    print('Enviando mensaje de inicio del juego');
     widget.channel.sink.add(json.encode({'type': 'start'}));
   }
 
@@ -207,36 +204,43 @@ class _TriviaPageState extends State<TriviaPage> {
     startGlobalTimer();
   }
 
-  void startGlobalTimer() {
+
+  void _nextQuestion() {
+    if (currentQuestionIndex < widget.questions.length - 1) {
+      setState(() {
+        currentQuestionIndex++;
+        timeRemaining = 10;
+        startTimer();
+      });
+    } else {
+      timer?.cancel();
+      print('Enviando puntaje final: $score');
+      
+      // Verificar si el canal WebSocket está abierto
+      if (widget.channel.sink != null) {
+        widget.channel.sink.add(json.encode({
+          'type': 'end',
+          'score': score
+        }));
+        print('Mensaje de puntaje final enviado');
+      } else {
+        print('El canal WebSocket está cerrado o no disponible');
+      }
+    }
+  }
+
+  void startTimer() {
+    timer?.cancel(); // Asegúrate de cancelar cualquier temporizador activo
     timer = Timer.periodic(Duration(seconds: 1), (timer) {
       setState(() {
         if (timeRemaining > 0) {
           timeRemaining--;
         } else {
           timer.cancel();
-          widget.channel.sink.add(json.encode({'type': 'end', 'score': score}));
-          _showEndDialog();
+          _nextQuestion(); // Cambia a la siguiente pregunta cuando se acabe el tiempo
         }
       });
     });
-  }
-
-  void _showEndDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Juego terminado'),
-        content: Text('Se ha acabado el tiempo. ¡Gracias por jugar!'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _answerQuestion(String selectedOption) {
@@ -340,7 +344,6 @@ class _TriviaPageState extends State<TriviaPage> {
             ),
           ],
         ),
-
       ),
     );
   }

@@ -1,12 +1,10 @@
 const WebSocket = require('ws');
 const axios = require('axios');
 
-
 async function obtenerPreguntas() {
-  const url = 'https://api.quiz-contest.xyz/questions?limit=60&page=1&category=geography&format=multiple';
+  const url = 'https://api.quiz-contest.xyz/questions?limit=10&page=1&category=geography&format=multiple';
   try {
     const response = await axios.get(url, { headers: { 'Authorization': '$2b$12$JQ01Gihw4ey.Lk2azzoyH.XjaL2SdZvzCNN/IGKi66GM9Q89J.OaC' } });
-
     const preguntas = response.data.questions.map(pregunta => ({
       question: pregunta.question,
       options: [...pregunta.incorrectAnswers, pregunta.correctAnswers].sort(() => Math.random() - 0.5),
@@ -20,89 +18,96 @@ async function obtenerPreguntas() {
   }
 }
 
+// Inicializar el servidor WebSocket
 obtenerPreguntas().then(questions => {
   console.log('Servidor WebSocket ejecutándose con las preguntas obtenidas');
 
-  const wss = new WebSocket.Server({ port: 8082 }); 
-  let players = [];
-  let globalTimer = 60;  // Timer global de 1 minuto
-  let scores = {}; // Puntajes de los jugadores
+  const wss = new WebSocket.Server({ port: 8082 });
 
-  function broadcastPlayers() {
-    const playerNames = players.map(player => player.id);
-    players.forEach(player => {
-      player.ws.send(JSON.stringify({ type: 'players', players: playerNames }));
-    });
-  }
-
-  function broadcastScores() {
-    players.forEach(player => {
-      player.ws.send(JSON.stringify({ type: 'update_scores', scores }));
-    });
-  }
-
-  function startGlobalTimer() {
-    globalTimer = 60; // Reiniciar el timer global a 1 minuto
-    const timerInterval = setInterval(() => {
-      globalTimer--;
-      players.forEach(player => {
-        player.ws.send(JSON.stringify({ type: 'timer', timeRemaining: globalTimer }));
-      });
-
-      if (globalTimer <= 0) {
-        clearInterval(timerInterval);
-        players.forEach(player => {
-          player.ws.send(JSON.stringify({ type: 'end', message: 'El tiempo ha terminado' }));
-        });
-      }
-    }, 1000);
-  }
+  let players = []; // Array de jugadores
+  let scores = {}; // Objeto para almacenar los puntajes de los jugadores
+  let finishedPlayers = new Set(); // Para rastrear los jugadores que han terminado
 
   wss.on('connection', ws => {
-    const playerId = `Jugador ${players.length + 1}`;
-    console.log(`${playerId} conectado`);
-    players.push({ ws, id: playerId });
-    scores[playerId] = 0; // Iniciar el puntaje en 0
+    const playerId = Date.now(); // Generar un ID único basado en el tiempo
+    players.push({ id: playerId, ws: ws });
+    scores[playerId] = 0; // Inicializar el puntaje para el nuevo jugador
 
-    broadcastPlayers();
-    broadcastScores(); // Enviar puntajes iniciales
+    console.log(`Nuevo jugador conectado con ID: ${playerId}`);
+    ws.send(JSON.stringify({ type: 'yourId', id: playerId }));
 
 
     ws.on('message', message => {
       const msg = JSON.parse(message);
+      console.log('Mensaje recibido:', msg);
 
       if (msg.type === 'start') {
-
         console.log('El juego ha comenzado');
-        players.forEach(player => {
-          player.ws.send(JSON.stringify({ type: 'start', questions, timer: globalTimer, scores }));
+        players.forEach(({ ws }, index) => {
+          console.log(`Enviando preguntas al jugador ${index + 1}`);
+          ws.send(JSON.stringify({ type: 'start', questions: questions }));
         });
         startGlobalTimer();
       }
 
-      if (msg.type === 'update_score') {
-        scores[playerId] = msg.score; // Actualizar puntaje del jugador
-        broadcastScores(); // Enviar puntajes actualizados
+      if (msg.type === 'end') {
+        const player = players.find(player => player.ws === ws);
+        if (!player) return;
+
+        console.log(`Jugador ${player.id} terminó el juego con un puntaje de: ${msg.score}`);
+
+        // Asignar el puntaje recibido
+        scores[player.id] = msg.score;
+        finishedPlayers.add(player.id); // Marcar al jugador como terminado
+
+        // Verificar si todos los jugadores han terminado
+        if (finishedPlayers.size === players.length) {
+          // Preparar los puntajes para cada jugador
+          const playerScores = {};
+          players.forEach(({ id }) => {
+            playerScores[id] = scores[id] || 0;
+          });
+
+          console.log('Enviando resultados...');
+          players.forEach(({ ws, id }) => {
+            ws.send(JSON.stringify({
+              type: 'over',
+              player1Score: playerScores[players[0].id] || 0,
+              player2Score: playerScores[players[1].id] || 0
+            }));
+            console.log(`Enviado puntaje final al jugador con ID ${id}: ${playerScores[id]}`);
+          });
+
+          // Reiniciar los puntajes para un nuevo juego
+          scores = {};
+          players = [];
+          finishedPlayers.clear(); // Limpiar el conjunto de jugadores terminados
+        }
       }
 
-      if (msg.type === 'end') {
-        console.log(`${playerId} terminó el juego con puntaje: ${msg.score}`);
-
+      if (msg.type === 'disconnect') {
+        console.log('Jugador desconectado');
+        const playerIndex = players.findIndex(player => player.ws === ws);
+        if (playerIndex !== -1) {
+          const [removedPlayer] = players.splice(playerIndex, 1);
+          delete scores[removedPlayer.id];
+          finishedPlayers.delete(removedPlayer.id); // Eliminar al jugador desconectado del conjunto de terminados
+        }
       }
     });
 
     ws.on('close', () => {
 
-      console.log(`${playerId} desconectado`);
-      players = players.filter(player => player.ws !== ws);
-      delete scores[playerId]; // Eliminar puntaje del jugador desconectado
-      broadcastPlayers();
-      broadcastScores(); // Actualizar tabla de puntajes
-
+      console.log('Jugador desconectado');
+      const playerIndex = players.findIndex(player => player.ws === ws);
+      if (playerIndex !== -1) {
+        const [removedPlayer] = players.splice(playerIndex, 1);
+        delete scores[removedPlayer.id];
+        finishedPlayers.delete(removedPlayer.id); // Eliminar al jugador desconectado del conjunto de terminados
+      }
     });
   });
 
 }).catch(error => {
   console.error('Error al iniciar el servidor WebSocket:', error);
 });
-
